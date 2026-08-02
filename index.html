@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plusminus: turn meter readings into a measurement you can hand in</title>
+<meta name="description" content="Your multimeter's manual says ±(0.5% of reading + 2 counts). This turns that into a real uncertainty, propagates it through your formula, and rounds the answer the way a lab report wants it. Runs in your browser, nothing is uploaded.">
+<meta property="og:title" content="Plusminus">
+<meta property="og:description" content="Turn instrument readings into a reportable measurement, with the uncertainty budget worked out. Runs in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cig13zs.github.io/plusminus/">
+<meta name="theme-color" content="#161613">
+<link rel="canonical" href="https://cig13zs.github.io/plusminus/">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>±</text></svg>">
+<style>
+  :root{--bg:#fcfcfb;--panel:#fff;--ink:#161613;--muted:#5f5f58;--line:#e6e6e1;--accent:#161613;
+        --hit:#c62f42;--hit-soft:#fbe9ec;--ok:#127a3e;--code:#f2f2ee;--bar:#8a8a7e;--bar-top:#c62f42}
+  @media (prefers-color-scheme:dark){:root{--bg:#0e0e0d;--panel:#161615;--ink:#efefe9;--muted:#9c9c92;
+        --line:#282824;--accent:#efefe9;--hit:#ff6b7c;--hit-soft:#331319;--ok:#4ec27e;--code:#1a1a18;
+        --bar:#6e6e64;--bar-top:#ff6b7c}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px}
+  a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+  a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--hit);outline-offset:3px}
+  .skip-link{position:fixed;left:16px;top:12px;z-index:10;padding:8px 12px;border-radius:8px;
+    background:var(--ink);color:var(--bg);text-decoration:none;transform:translateY(-160%)}
+  .skip-link:focus{transform:translateY(0)}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;background:var(--code);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+
+  header{padding:70px 0 4px}
+  h1{font-size:clamp(34px,6vw,50px);line-height:1.04;letter-spacing:-.03em;margin:0;font-weight:740}
+  .lede{font-size:clamp(17px,2.2vw,19px);color:var(--muted);margin:18px 0 0;max-width:34em}
+
+  .tool{margin:34px 0 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .band{font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:640;margin:0 0 10px}
+  .band + .band{margin-top:26px}
+
+  input,select{border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);
+    padding:9px 11px;font:15px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-width:0;width:100%}
+  select{font-family:inherit;font-size:14px}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
+  label.f{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
+
+  .formula{display:grid;grid-template-columns:80px 1fr 110px;gap:10px;align-items:end}
+  .eq{display:flex;align-items:center;gap:10px}
+
+  .qty{border:1px solid var(--line);border-radius:11px;padding:13px;margin:0 0 10px;background:var(--bg)}
+  .qty.dead{opacity:.5}
+  .qhead{display:grid;grid-template-columns:88px 1fr 1fr auto;gap:10px;align-items:end}
+  .qmode{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+  .qmode.wide{grid-template-columns:1fr}
+  .qnote{font-size:12.5px;color:var(--muted);margin:9px 0 0}
+  .qnote b{color:var(--ink);font-weight:640}
+  .xbtn{border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:9px;
+    padding:9px 12px;cursor:pointer;font-size:14px;line-height:1}
+  .xbtn:hover{color:var(--hit);border-color:var(--hit)}
+
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+  .btn{display:inline-flex;align-items:center;gap:7px;padding:11px 18px;border-radius:9px;font-weight:640;
+    font-size:14.5px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+  .btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+  .opt{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;color:var(--muted);cursor:pointer;user-select:none}
+  .opt input{width:auto}
+
+  .result{margin-top:22px;border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:18px}
+  .result.bad{border-color:var(--hit);background:var(--hit-soft)}
+  .answer{font:clamp(21px,3.4vw,29px)/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-weight:600;letter-spacing:-.01em;word-break:break-word}
+  .facts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .chip{font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;background:var(--panel);color:var(--muted)}
+  .chip b{color:var(--ink)}
+  .err{color:var(--hit);font-size:14.5px;margin:0}
+
+  .scroller{overflow-x:auto;margin-top:16px}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:540px}
+  th,td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);font-weight:640}
+  td.num{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  tr.top td{font-weight:640}
+  .barcell{width:110px}
+  .bar{height:7px;border-radius:4px;background:var(--line);overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--bar)}
+  tr.top .bar span{background:var(--bar-top)}
+
+  .hint{font-size:12.5px;color:var(--muted);margin-top:12px}
+  section{padding:38px 0 0;margin-top:40px;border-top:1px solid var(--line)}
+  h2{font-size:20px;letter-spacing:-.01em;margin:0 0 12px;font-weight:680}
+  h3{font-size:15px;margin:22px 0 6px;font-weight:660}
+  p{margin:0 0 14px}
+  .muted{color:var(--muted)}
+  ul{margin:0 0 14px;padding-left:20px;color:var(--muted)}
+  li{margin:0 0 6px}
+  footer{padding:40px 0 72px;margin-top:44px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+  .kofi{display:inline-block;padding:11px 20px;border-radius:9px;background:#FF5E5B;color:#fff;font-weight:640;font-size:14.5px;text-decoration:none;margin-bottom:14px}
+
+  @media (max-width:640px){
+    .formula{grid-template-columns:1fr}
+    .qhead{grid-template-columns:1fr 1fr;gap:9px}
+    .qhead .xwrap{grid-column:span 2;justify-self:start}
+    .qmode{grid-template-columns:1fr 1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="wrap">
+
+<header>
+  <h1>Plusminus</h1>
+  <p class="lede">Your meter's manual says <code>±(0.5% of reading + 2 counts)</code>. Your lab report
+  wants <code>R = 10.00 ± 0.15 Ω</code>. This does the part in between: turns the spec into a real
+  uncertainty, pushes it through your formula, and rounds the answer the way it should be written.</p>
+</header>
+
+<main id="main">
+<div class="tool">
+
+  <p class="band">What you are working out</p>
+  <div class="formula">
+    <div>
+      <label class="f" for="sym">Symbol</label>
+      <input id="sym" value="R" autocomplete="off" spellcheck="false" aria-label="Result symbol">
+    </div>
+    <div>
+      <label class="f" for="formula">Formula</label>
+      <input id="formula" value="V/I" autocomplete="off" spellcheck="false" aria-describedby="fhelp">
+    </div>
+    <div>
+      <label class="f" for="unit">Unit</label>
+      <input id="unit" value="Ω" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+  <p class="qnote" id="fhelp">Use the symbols you name below. <code>+ - * / ^ ( )</code> and
+  <code>sqrt ln log exp sin cos tan abs</code>, plus <code>pi</code> and <code>e</code>.</p>
+
+  <p class="band">What you measured</p>
+  <div id="quantities"></div>
+  <div class="row">
+    <button id="add" class="btn" type="button">Add a quantity</button>
+    <label class="opt"><input type="checkbox" id="onesig"> round the uncertainty to one figure instead of two</label>
+  </div>
+
+  <div class="result" id="result" role="status" aria-live="polite">
+    <div class="answer" id="answer">—</div>
+    <div class="facts" id="facts"></div>
+  </div>
+
+  <div class="scroller" id="budgetWrap" hidden>
+    <table>
+      <caption class="sr-only">Uncertainty budget</caption>
+      <thead><tr>
+        <th scope="col">Quantity</th><th scope="col">Value</th><th scope="col">u</th>
+        <th scope="col">∂f/∂x</th><th scope="col">Contribution</th><th scope="col" class="barcell">Share</th>
+      </tr></thead>
+      <tbody id="budget"></tbody>
+    </table>
+  </div>
+
+  <div class="row">
+    <button id="copyText" class="btn primary" type="button">Copy the result line</button>
+    <button id="copyLatex" class="btn" type="button">Copy as LaTeX</button>
+    <button id="copyBudget" class="btn" type="button">Copy the budget table</button>
+    <span class="hint" id="copied" aria-live="polite"></span>
+  </div>
+
+  <p class="hint">Everything above is computed in this page. It makes no network requests at all,
+  which you can check in your dev tools. Nothing you type leaves the tab.</p>
+</div>
+
+<section>
+  <h2>What the spec on your meter actually means</h2>
+  <p class="muted">A digital multimeter's accuracy is written as a percentage of the reading plus a
+  number of counts, because it has two separate error sources: one that scales with the signal, and one
+  fixed to the last digit of the display. A count is worth whatever the last digit is worth on the range
+  you are using. On a 6.000 V range, one count is 0.001 V.</p>
+  <p class="muted">So a Fluke 115 reading 5.000 V on that range, at <code>±(0.5% + 2)</code>, is off by
+  at most 0.5% × 5.000 + 2 × 0.001 = <b>0.027 V</b>.</p>
+  <h3>The part almost everyone gets wrong</h3>
+  <p class="muted">That 0.027 V is a limit the manufacturer guarantees you stay inside. It is not a
+  standard deviation, and putting it straight into a propagation formula overstates your uncertainty by
+  about 73%. With no other information, the value is treated as equally likely anywhere in that band,
+  which makes the standard uncertainty 0.027 / √3 = 0.0156 V. This tool does that division for you and
+  shows it in the budget.</p>
+  <p class="muted">If you have a calibration certificate instead, it usually quotes an expanded
+  uncertainty at k = 2. Pick that option and it divides by 2 rather than √3.</p>
+</section>
+
+<section>
+  <h2>Where the number in the answer comes from</h2>
+  <p class="muted">Each quantity gets a standard uncertainty <code>u</code>. The formula gives each one
+  a sensitivity <code>∂f/∂x</code>, worked out numerically so any formula you can type will work. The
+  combined uncertainty is the root of the summed squares of <code>∂f/∂x × u</code>, which is the rule
+  every lab manual writes as the propagation formula.</p>
+  <p class="muted">The expanded uncertainty is that multiplied by a coverage factor. With repeated
+  readings in the mix the factor comes from Student's t at 95% for the effective degrees of freedom
+  (Welch–Satterthwaite), so five readings give a wider interval than fifty. With no repeats it settles
+  at 1.96.</p>
+  <p class="muted">The budget table is the useful part. It sorts your inputs by how much of the total
+  variance each one owns, so you can see whether buying a better meter would help or whether one sloppy
+  measurement is carrying the whole error.</p>
+</section>
+
+<section>
+  <h2>What it does not do</h2>
+  <ul>
+    <li>It does not check your units. Values and uncertainties have to be in the same unit as each
+      other; the unit box is a label that gets printed with the answer.</li>
+    <li>It assumes your inputs are independent. Two readings from the same meter on the same range are
+      correlated, and the real uncertainty is then a little larger than this shows.</li>
+    <li>It has no instrument database. Type the numbers from your own manual, because a spec depends on
+      range, function, temperature and time since calibration.</li>
+    <li>It will not tell you your result is wrong. It tells you how precise it is, which is a
+      different thing.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Offline</h2>
+  <p class="muted">One HTML file and one script. Save the page and it keeps working with no connection.
+  There is no server to send anything to, no analytics, no storage, and the browser extension you might
+  expect does not exist because this does not need permissions to do its job.</p>
+</section>
+</main>
+
+<footer>
+  <a class="kofi" href="https://ko-fi.com/jju1s">Buy me a coffee</a>
+  <p>Free and MIT licensed. <a href="https://github.com/cig13zs/plusminus">Source on GitHub</a>.</p>
+</footer>
+
+</div>
+<script src="core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var P = globalThis.PlusMinus;
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Saving the page without core.js next to it used to leave a form that looked
+  // fine and threw on the first keystroke, with the error only in a console
+  // nobody has open.
+  if (!P) {
+    var warn = $('answer');
+    if (warn) warn.textContent = 'core.js did not load, so nothing here will calculate.';
+    var box = $('result');
+    if (box) box.className = 'result bad';
+    return;
+  }
+
+  // The page opens on a worked example rather than an empty form, so the first
+  // thing you see is the shape of the answer you are trying to get.
+  var SEED = [
+    { sym: 'V', value: '5.000', mode: 'spec', pct: '0.5', counts: '2', res: '0.001', shape: 'rectangular' },
+    { sym: 'I', value: '0.500', mode: 'spec', pct: '1.0', counts: '3', res: '0.001', shape: 'rectangular' }
+  ];
+
+  var MODES = [
+    ['spec', 'instrument spec: ±(% of reading + counts)'],
+    ['plusminus', 'a ± value I already know'],
+    ['repeats', 'several readings of the same thing'],
+    ['resolution', 'the display step only']
+  ];
+
+  var rows = [];
+  var seq = 0;
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function field(labelText, node, id) {
+    var box = el('div');
+    var lab = el('label', 'f', labelText);
+    lab.setAttribute('for', id);
+    node.id = id;
+    box.appendChild(lab);
+    box.appendChild(node);
+    return box;
+  }
+
+  /* One listener per field, and it stores the value before recomputing. Two
+     listeners meant recompute ran on the value from the previous keystroke, so
+     everything was one character behind. */
+  function input(value, placeholder, store) {
+    var n = document.createElement('input');
+    n.type = 'text';
+    n.value = value === undefined ? '' : value;
+    n.autocomplete = 'off';
+    n.spellcheck = false;
+    if (placeholder) n.placeholder = placeholder;
+    n.addEventListener('input', function () {
+      if (store) store(n.value);
+      recompute();
+    });
+    return n;
+  }
+
+  function buildRow(state) {
+    var id = 'q' + (seq++);
+    var row = { id: id, state: state };
+    var box = el('div', 'qty');
+
+    var head = el('div', 'qhead');
+    var sym = input(state.sym, 'V');
+    var val = input(state.value, '5.000');
+    var mode = document.createElement('select');
+    MODES.forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m[0];
+      o.textContent = m[1];
+      mode.appendChild(o);
+    });
+    mode.value = state.mode;
+    mode.addEventListener('change', function () {
+      state.mode = mode.value;
+      render();
+    });
+
+    head.appendChild(field('Symbol', sym, id + '-sym'));
+    head.appendChild(field('Reading', val, id + '-val'));
+    head.appendChild(field('How you know its uncertainty', mode, id + '-mode'));
+
+    var xwrap = el('div', 'xwrap');
+    var x = el('button', 'xbtn', 'Remove');
+    x.type = 'button';
+    x.setAttribute('aria-label', 'Remove this quantity');
+    x.addEventListener('click', function () {
+      rows = rows.filter(function (r) { return r !== row; });
+      render();
+    });
+    xwrap.appendChild(x);
+    head.appendChild(xwrap);
+    box.appendChild(head);
+
+    var fields = el('div', 'qmode');
+    box.appendChild(fields);
+    var note = el('p', 'qnote');
+    box.appendChild(note);
+
+    row.node = box;
+    row.sym = sym;
+    row.val = val;
+    row.fields = fields;
+    row.note = note;
+    row.mode = mode;
+    return row;
+  }
+
+  // The per-mode inputs are rebuilt on every mode change, which keeps one place
+  // responsible for what a mode needs instead of a pile of hidden fields.
+  function fillMode(row) {
+    var s = row.state, id = row.id, f = row.fields;
+    f.textContent = '';
+    f.className = 'qmode';
+
+    if (s.mode === 'spec') {
+      var pct = input(s.pct, '0.5', function (v) { s.pct = v; });
+      var cnt = input(s.counts, '2', function (v) { s.counts = v; });
+      var res = input(s.res, '0.001', function (v) { s.res = v; });
+      f.appendChild(field('% of reading', pct, id + '-pct'));
+      f.appendChild(field('+ counts', cnt, id + '-cnt'));
+      f.appendChild(field('one count is worth', res, id + '-res'));
+
+      var shape = document.createElement('select');
+      [['rectangular', 'a limit from the manual (÷√3)'],
+       ['normal95', 'expanded, k = 2, from a certificate (÷2)'],
+       ['standard', 'already a standard uncertainty (÷1)']].forEach(function (o) {
+        var n = document.createElement('option');
+        n.value = o[0];
+        n.textContent = o[1];
+        shape.appendChild(n);
+      });
+      shape.value = s.shape || 'rectangular';
+      shape.addEventListener('change', function () { s.shape = shape.value; recompute(); });
+      var wide = el('div', 'qmode wide');
+      wide.appendChild(field('What that spec is', shape, id + '-shape'));
+      f.parentNode.insertBefore(wide, row.note);
+      row.extra = wide;
+
+    } else if (s.mode === 'plusminus') {
+      var pm = input(s.pm, '0.05', function (v) { s.pm = v; });
+      f.className = 'qmode wide';
+      f.appendChild(field('± (same unit as the reading)', pm, id + '-pm'));
+
+    } else if (s.mode === 'repeats') {
+      var reps = input(s.reps, '10.1, 10.3, 10.2, 10.0, 10.4', function (v) { s.reps = v; });
+      f.className = 'qmode wide';
+      f.appendChild(field('Readings, separated by commas or spaces', reps, id + '-reps'));
+
+    } else {
+      var step = input(s.step, '0.01', function (v) { s.step = v; });
+      f.className = 'qmode wide';
+      f.appendChild(field('Smallest step the display shows', step, id + '-step'));
+    }
+  }
+
+  function numbersIn(text) {
+    return String(text || '').split(/[\s,;]+/).map(Number).filter(function (v) { return isFinite(v); });
+  }
+
+  // one quantity -> {name, value, u, dof} plus the sentence under the row
+  function resolve(row) {
+    var s = row.state;
+    s.sym = row.sym.value.trim();
+    s.value = row.val.value.trim();
+    var name = s.sym;
+    var value = Number(s.value);
+    var out = { name: name, value: value, u: 0, dof: Infinity };
+    var note = '';
+
+    if (s.mode === 'spec') {
+      var spec = P.fromSpec({
+        reading: value, percent: Number(s.pct), counts: Number(s.counts),
+        resolution: Number(s.res), shape: s.shape || 'rectangular'
+      });
+      out.u = spec.u;
+      note = '± ' + fmt(spec.halfWidth) + ' from the spec, so u = ' + fmt(spec.u) +
+        (spec.shape === 'rectangular' ? ' after dividing by √3.' :
+         spec.shape === 'normal95' ? ' after dividing by 2.' : '.');
+    } else if (s.mode === 'plusminus') {
+      out.u = Math.abs(Number(s.pm)) || 0;
+      note = 'u = ' + fmt(out.u) + ', taken as a standard uncertainty.';
+    } else if (s.mode === 'repeats') {
+      var xs = numbersIn(s.reps);
+      var a = P.fromRepeats(xs);
+      if (a.n >= 2) {
+        out.value = a.mean;
+        out.u = a.u;
+        out.dof = a.dof;
+        row.val.value = String(Number(a.mean.toPrecision(12)));
+        s.value = row.val.value;
+        note = a.n + ' readings, mean ' + fmt(a.mean) + ', s = ' + fmt(a.sd) +
+          ', u = s/√n = ' + fmt(a.u) + ' with ' + a.dof + ' degrees of freedom.';
+      } else {
+        note = 'Two or more readings are needed before a spread means anything.';
+      }
+    } else {
+      var r = P.fromResolution(Number(s.step));
+      out.u = r.u;
+      note = 'Half a step is ' + fmt(r.halfWidth) + ', so u = ' + fmt(r.u) + ' after dividing by √3.';
+    }
+
+    row.note.textContent = note;
+    row.node.classList.toggle('dead', !name || !isFinite(out.value));
+    return out;
+  }
+
+  function fmt(x) {
+    if (!isFinite(x)) return '—';
+    if (x === 0) return '0';
+    var a = Math.abs(x);
+    if (a >= 1e5 || a < 1e-4) return x.toExponential(3);
+    return String(Number(x.toPrecision(4)));
+  }
+
+  var last = null;
+
+  function recompute() {
+    var symbol = $('sym').value.trim() || 'y';
+    var unit = $('unit').value.trim();
+    var formula = $('formula').value.trim();
+    var sig = $('onesig').checked ? 1 : 2;
+
+    var inputs = rows.map(resolve).filter(function (q) {
+      return q.name && isFinite(q.value);
+    });
+
+    var res = $('result'), answer = $('answer'), facts = $('facts');
+    facts.textContent = '';
+    $('budgetWrap').hidden = true;
+    last = null;
+
+    if (!formula || !inputs.length) {
+      res.classList.remove('bad');
+      answer.textContent = '—';
+      return;
+    }
+
+    var out;
+    try {
+      out = P.propagate(formula, inputs);
+    } catch (err) {
+      res.classList.add('bad');
+      answer.textContent = '—';
+      var p = el('p', 'err', err.message);
+      facts.appendChild(p);
+      return;
+    }
+    res.classList.remove('bad');
+
+    var eng = P.engineering(out.value, out.U, unit);
+    var shown = P.report(out.value / eng.scale, out.U / eng.scale, { sigFigs: sig, unit: eng.unit });
+    answer.textContent = symbol + ' = ' + shown.text;
+
+    var pct = isFinite(out.relative) ? (out.relative * 100) : NaN;
+    addChip(facts, 'relative', isFinite(pct) ? pct.toPrecision(2) + '%' : '—');
+    addChip(facts, 'k', out.k.toFixed(2));
+    addChip(facts, 'confidence', '95%');
+    addChip(facts, 'u', fmt(out.uc / eng.scale) + ' ' + eng.unit, 'c');
+    if (isFinite(out.dofEff)) addChip(facts, 'eff. dof', out.dofEff.toFixed(1));
+
+    drawBudget(out, eng);
+    last = { symbol: symbol, shown: shown, out: out, eng: eng, unit: eng.unit };
+  }
+
+  // Built out of nodes rather than innerHTML: nothing here needs an HTML parser,
+  // and a page that never assigns markup cannot be talked into rendering any.
+  function addChip(into, label, value, subscript) {
+    var c = el('span', 'chip');
+    c.appendChild(document.createTextNode(label));
+    if (subscript) c.appendChild(el('sub', null, subscript));
+    c.appendChild(document.createTextNode(' '));
+    c.appendChild(el('b', null, value));
+    into.appendChild(c);
+  }
+
+  function drawBudget(out, eng) {
+    var body = $('budget');
+    body.textContent = '';
+    out.terms.forEach(function (t, i) {
+      var tr = el('tr');
+      if (i === 0 && t.share > 0) tr.className = 'top';
+      tr.appendChild(el('td', null, t.name + (t.used ? '' : ' (unused)')));
+      tr.appendChild(cell(fmt(t.value)));
+      tr.appendChild(cell(fmt(t.u)));
+      tr.appendChild(cell(fmt(t.sensitivity)));
+      tr.appendChild(cell(fmt(t.contribution / eng.scale)));
+
+      var td = el('td', 'barcell');
+      var bar = el('div', 'bar');
+      var fill = el('span');
+      fill.style.width = (t.share * 100).toFixed(1) + '%';
+      bar.appendChild(fill);
+      bar.title = (t.share * 100).toFixed(1) + '% of the variance';
+      td.appendChild(bar);
+      tr.appendChild(td);
+      body.appendChild(tr);
+    });
+    $('budgetWrap').hidden = out.terms.length === 0;
+  }
+
+  function cell(text) {
+    var td = el('td', 'num', text);
+    return td;
+  }
+
+  function say(msg) {
+    $('copied').textContent = msg;
+    setTimeout(function () { $('copied').textContent = ''; }, 2600);
+  }
+
+  function copy(text) {
+    if (!text) { say('Nothing to copy yet.'); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { say('Copied.'); }, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      say(ok ? 'Copied.' : 'Could not reach the clipboard.');
+    }
+  }
+
+  function latex() {
+    if (!last) return '';
+    var u = last.unit ? '\\ \\mathrm{' + last.unit.replace(/µ/g, '\\mu ') + '}' : '';
+    return '$' + last.symbol + ' = ' + last.shown.value + ' \\pm ' + last.shown.U + u + '$';
+  }
+
+  function budgetMarkdown() {
+    if (!last) return '';
+    var lines = ['| Quantity | Value | u | df/dx | Contribution | Share |',
+                 '|---|---|---|---|---|---|'];
+    last.out.terms.forEach(function (t) {
+      lines.push('| ' + t.name + ' | ' + fmt(t.value) + ' | ' + fmt(t.u) + ' | ' +
+        fmt(t.sensitivity) + ' | ' + fmt(t.contribution) + ' | ' +
+        (t.share * 100).toFixed(1) + '% |');
+    });
+    lines.push('');
+    lines.push('u_c = ' + fmt(last.out.uc) + ', k = ' + last.out.k.toFixed(2) +
+      ', U = ' + fmt(last.out.U) + ' (95%)');
+    lines.push(last.symbol + ' = ' + last.shown.text);
+    return lines.join('\n');
+  }
+
+  function render() {
+    var host = $('quantities');
+    host.textContent = '';
+    rows.forEach(function (row) {
+      host.appendChild(row.node);
+      if (row.extra && row.extra.parentNode) row.extra.parentNode.removeChild(row.extra);
+      row.extra = null;
+      fillMode(row);
+    });
+    recompute();
+  }
+
+  function addRow(state) {
+    rows.push(buildRow(state || { sym: '', value: '', mode: 'spec', pct: '0.5', counts: '2', res: '0.001', shape: 'rectangular' }));
+    render();
+  }
+
+  function init() {
+    SEED.forEach(function (s) { rows.push(buildRow(s)); });
+    ['sym', 'formula', 'unit'].forEach(function (id) {
+      $(id).addEventListener('input', recompute);
+    });
+    $('onesig').addEventListener('change', recompute);
+    $('add').addEventListener('click', function () { addRow(); });
+    $('copyText').addEventListener('click', function () {
+      copy(last ? last.symbol + ' = ' + last.shown.text : '');
+    });
+    $('copyLatex').addEventListener('click', function () { copy(latex()); });
+    $('copyBudget').addEventListener('click', function () { copy(budgetMarkdown()); });
+    render();
+  }
+
+  // Bottom of the script on purpose. Called any earlier it reads constants that
+  // are still undefined, throws during parse, and takes the rest of the file with it.
+  init();
+})();
+</script>
+</body>
+</html>
