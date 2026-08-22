@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Plusminus: turn meter readings into a measurement you can hand in</title>
-<meta name="description" content="Your multimeter's manual says ±(0.5% of reading + 2 counts). This turns that into a real uncertainty, propagates it through your formula, and rounds the answer the way a lab report wants it. Runs in your browser, nothing is uploaded.">
+<meta name="description" content="Turn a meter specification into an uncertainty estimate, propagate it through a supported expression, and inspect the budget. Runs in your browser; nothing is uploaded.">
 <meta property="og:title" content="Plusminus">
 <meta property="og:description" content="Turn instrument readings into a reportable measurement, with the uncertainty budget worked out. Runs in your browser.">
 <meta property="og:type" content="website">
@@ -112,8 +112,8 @@
 <header>
   <h1>Plusminus</h1>
   <p class="lede">Your meter's manual says <code>±(0.5% of reading + 2 counts)</code>. Your lab report
-  wants <code>R = 10.00 ± 0.15 Ω</code>. This does the part in between: turns the spec into a real
-  uncertainty, pushes it through your formula, and rounds the answer the way it should be written.</p>
+  wants <code>R = 10.00 ± 0.15 Ω</code>. This estimates expanded uncertainty under the assumptions
+  you enter, propagates it through a supported expression, and rounds it using the selected convention.</p>
 </header>
 
 <main id="main">
@@ -145,7 +145,7 @@
   </div>
 
   <div class="result" id="result" role="status" aria-live="polite">
-    <div class="answer" id="answer">—</div>
+    <div class="answer" id="answer">n/a</div>
     <div class="facts" id="facts"></div>
   </div>
 
@@ -179,22 +179,20 @@
   you are using. On a 6.000 V range, one count is 0.001 V.</p>
   <p class="muted">So a Fluke 115 reading 5.000 V on that range, at <code>±(0.5% + 2)</code>, is off by
   at most 0.5% × 5.000 + 2 × 0.001 = <b>0.027 V</b>.</p>
-  <h3>The part almost everyone gets wrong</h3>
-  <p class="muted">That 0.027 V is a limit the manufacturer guarantees you stay inside. It is not a
-  standard deviation, and putting it straight into a propagation formula overstates your uncertainty by
-  about 73%. With no other information, the value is treated as equally likely anywhere in that band,
-  which makes the standard uncertainty 0.027 / √3 = 0.0156 V. This tool does that division for you and
-  shows it in the budget.</p>
-  <p class="muted">If you have a calibration certificate instead, it usually quotes an expanded
-  uncertainty at k = 2. Pick that option and it divides by 2 rather than √3.</p>
+  <h3>From a bound to a standard uncertainty</h3>
+  <p class="muted">That 0.027 V is a bounded error under the conditions in the manufacturer's
+  specification; it is not itself a standard deviation. When only the bounds are known and a rectangular
+  distribution is appropriate, the standard uncertainty is 0.027 / √3 = 0.0156 V. This tool applies the
+  selected distribution and shows the conversion in the budget.</p>
+  <p class="muted">If a calibration certificate explicitly reports expanded uncertainty with
+  <code>k = 2</code>, select that option. Other coverage factors are not currently supported.</p>
 </section>
 
 <section>
   <h2>Where the number in the answer comes from</h2>
-  <p class="muted">Each quantity gets a standard uncertainty <code>u</code>. The formula gives each one
-  a sensitivity <code>∂f/∂x</code>, worked out numerically so any formula you can type will work. The
-  combined uncertainty is the root of the summed squares of <code>∂f/∂x × u</code>, which is the rule
-  every lab manual writes as the propagation formula.</p>
+  <p class="muted">Each quantity gets a standard uncertainty <code>u</code>. A supported expression
+  gives each one a sensitivity <code>∂f/∂x</code>, worked out numerically. For independent inputs, the
+  combined uncertainty is the root of the summed squares of <code>∂f/∂x × u</code>.</p>
   <p class="muted">The expanded uncertainty is that multiplied by a coverage factor. With repeated
   readings in the mix the factor comes from Student's t at 95% for the effective degrees of freedom
   (Welch–Satterthwaite), so five readings give a wider interval than fifty. With no repeats it settles
@@ -209,8 +207,8 @@
   <ul>
     <li>It does not check your units. Values and uncertainties have to be in the same unit as each
       other; the unit box is a label that gets printed with the answer.</li>
-    <li>It assumes your inputs are independent. Two readings from the same meter on the same range are
-      correlated, and the real uncertainty is then a little larger than this shows.</li>
+    <li>It assumes the inputs are independent and omits covariance terms. Correlation can make the
+      combined uncertainty higher or lower.</li>
     <li>It has no instrument database. Type the numbers from your own manual, because a spec depends on
       range, function, temperature and time since calibration.</li>
     <li>It will not tell you your result is wrong. It tells you how precise it is, which is a
@@ -220,9 +218,9 @@
 
 <section>
   <h2>Offline</h2>
-  <p class="muted">One HTML file and one script. Save the page and it keeps working with no connection.
-  There is no server to send anything to, no analytics, no storage, and the browser extension you might
-  expect does not exist because this does not need permissions to do its job.</p>
+  <p class="muted">Download <code>index.html</code> and <code>core.js</code> into the same folder and
+  the tool works without a connection. There is no server to send anything to, no analytics, and no
+  storage.</p>
 </section>
 </main>
 
@@ -452,7 +450,7 @@
   }
 
   function fmt(x) {
-    if (!isFinite(x)) return '—';
+    if (!isFinite(x)) return 'n/a';
     if (x === 0) return '0';
     var a = Math.abs(x);
     if (a >= 1e5 || a < 1e-4) return x.toExponential(3);
@@ -478,7 +476,7 @@
 
     if (!formula || !inputs.length) {
       res.classList.remove('bad');
-      answer.textContent = '—';
+      answer.textContent = 'n/a';
       return;
     }
 
@@ -487,7 +485,7 @@
       out = P.propagate(formula, inputs);
     } catch (err) {
       res.classList.add('bad');
-      answer.textContent = '—';
+      answer.textContent = 'n/a';
       var p = el('p', 'err', err.message);
       facts.appendChild(p);
       return;
@@ -499,7 +497,7 @@
     answer.textContent = symbol + ' = ' + shown.text;
 
     var pct = isFinite(out.relative) ? (out.relative * 100) : NaN;
-    addChip(facts, 'relative', isFinite(pct) ? pct.toPrecision(2) + '%' : '—');
+    addChip(facts, 'relative', isFinite(pct) ? pct.toPrecision(2) + '%' : 'n/a');
     addChip(facts, 'k', out.k.toFixed(2));
     addChip(facts, 'confidence', '95%');
     addChip(facts, 'u', fmt(out.uc / eng.scale) + ' ' + eng.unit, 'c');

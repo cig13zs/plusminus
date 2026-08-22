@@ -11,17 +11,17 @@ measurement is costing you the most.
 
 Web app: **[cig13zs.github.io/plusminus](https://cig13zs.github.io/plusminus/)**
 
-## The gap this fills
+## The workflow this covers
 
-Every lab manual tells you a multimeter's accuracy is `±(a% of reading + b
-counts)`. Every lab report wants a result written as `R = 10.00 ± 0.15 Ω`. The
-route between those two is four steps of arithmetic that no tool does for you.
-Search for it and you get university PDFs, a Fluke application note, and an NI
-support page, all of which explain how to do it by hand.
+Many lab manuals give a multimeter's accuracy as `±(a% of reading + b counts)`,
+while the report expects a result such as `R = 10.00 ± 0.15 Ω`. References and
+full metrology packages explain or calculate parts of that process. Plusminus
+keeps the common student workflow in one small page: enter the instrument spec,
+add repeatability and resolution, propagate the inputs through a formula, and
+inspect the resulting budget.
 
-There are plenty of significant-figure calculators and plenty of unit
-converters. None of them start from an instrument spec, and none of them show
-you the budget at the end.
+It is intentionally narrower than a general metrology package and more specific
+than a significant-figure calculator or unit converter.
 
 ## What it does
 
@@ -39,16 +39,16 @@ The budget table sorts your inputs by their share of the variance, so you can
 see whether a better meter would help or whether one measurement is carrying
 the whole error.
 
-## The mistake it exists to stop
+## A modelling choice that matters
 
-An accuracy spec is a limit the manufacturer promises you stay inside. It is
-not a standard deviation. Feeding the raw ±0.027 V into a propagation formula
-overstates the uncertainty by about 73%, because the right move is to divide by
-√3 first. That single division is the difference between a budget that means
-something and one that just looks careful.
+An accuracy specification gives a bounded error under the conditions stated by
+the manufacturer; it is not itself a standard deviation. When only the bounds
+are known and a rectangular distribution is appropriate, this tool uses
+`u = a / √3`. Treating the bound `a` as a standard uncertainty instead makes
+that component √3 times larger.
 
-If you have a calibration certificate rather than a manual, it usually quotes an
-expanded uncertainty at k = 2, so the divisor is 2. There is an option for that.
+If a calibration certificate explicitly reports expanded uncertainty with
+`k = 2`, select that option. Other coverage factors are not currently supported.
 
 ## Formulas
 
@@ -68,9 +68,8 @@ without a symbolic differentiation table to keep in sync.
 
 - It does not check units. Every value and uncertainty for one quantity has to
   be in the same unit; the unit box is a label printed with the answer.
-- It assumes your inputs are independent. Two readings from the same meter on
-  the same range are correlated, and the true uncertainty is then slightly
-  larger than what you see here.
+- It assumes the inputs are independent and omits covariance terms. Correlation
+  can make the combined uncertainty higher or lower.
 - There is no instrument database, on purpose. A spec depends on range,
   function, temperature and time since calibration, so it comes from your
   manual, not from a table someone typed once.
@@ -80,8 +79,8 @@ without a symbolic differentiation table to keep in sync.
 ## Offline and private
 
 One HTML file plus `core.js`. No build step, no dependencies, no analytics, no
-storage, no network requests. Save the page and it still works. Open the network
-tab and watch it stay empty.
+storage, no network requests. Download both files into the same folder and the
+tool works without a connection. Open the network tab and watch it stay empty.
 
 ## Tests
 
@@ -90,10 +89,10 @@ node core.test.js   # the maths
 node boot.test.js   # the page loads, computes its example, and fails out loud
 ```
 
-No dependencies either way. The expected numbers are worked examples, not
-whatever the code returned first: the Fluke 115 case is checked against its
-published DC volts spec of ±(0.5% + 2 counts), and the reporting cases against
-the rounding rules lab rubrics mark on.
+No dependencies either way. The expected numbers are worked examples rather
+than snapshots of whatever the code returned first. The Fluke 115 case is
+checked against its published DC volts specification of ±(0.5% + 2 counts), and
+the reporting cases check the documented rounding convention.
 
 `boot.test.js` exists because maths that is correct and never called still looks
 like a finished form that does nothing. It runs the page script against a hand

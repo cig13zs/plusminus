@@ -152,11 +152,10 @@
 
   /* ------------------------------------------------------- uncertainty types */
 
-  /* A "±(a% of reading + b counts)" spec is a limit the maker guarantees, not a
-     standard deviation. GUM treats a limit with no other information as
-     rectangular, so the standard uncertainty is halfWidth/sqrt(3). Reading it as
-     a standard deviation overstates the uncertainty by about 73%, which is the
-     single most common mistake in a first lab report. */
+  /* A "±(a% of reading + b counts)" specification gives a bound under the
+     manufacturer's stated conditions, not a standard deviation. When only the
+     bounds are known, this model can treat the error as rectangular, giving a
+     standard uncertainty of halfWidth/sqrt(3). */
   var DIVISOR = { rectangular: Math.sqrt(3), triangular: Math.sqrt(6), normal95: 2, normal99: 2.576, standard: 1 };
 
   function specHalfWidth(spec) {
@@ -172,8 +171,8 @@
     return { halfWidth: a, shape: shape, u: a / DIVISOR[shape], dof: Infinity };
   }
 
-  /* Resolution alone: a display can only be read to its last digit, so the true
-     value sits anywhere in that step. Half a step, rectangular. */
+  /* This model treats display quantization error as rectangular over ±step/2,
+     giving a standard uncertainty of step/sqrt(12). */
   function fromResolution(step) {
     var a = Math.abs(Number(step) || 0) / 2;
     return { halfWidth: a, shape: 'rectangular', u: a / Math.sqrt(3), dof: Infinity };
@@ -283,9 +282,8 @@
     return Math.max(0, -(mag - (sig - 1)));
   }
 
-  /* Round the uncertainty first, then bring the value to the same decimal place.
-     Doing it the other way round lands the value on the wrong digit, which is
-     the mistake the marking rubric is actually looking for. */
+  /* Round the uncertainty first, then bring the value to the same decimal place
+     so the value and its uncertainty use a consistent reporting precision. */
   function report(value, U, opts) {
     var options = opts || {};
     var sig = options.sigFigs === 1 ? 1 : 2;
