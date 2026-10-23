@@ -85,6 +85,12 @@ One HTML file plus `core.js`. No build step, no dependencies, no analytics, no
 storage, no network requests. Download both files into the same folder and the
 tool works without a connection. Open the network tab and watch it stay empty.
 
+The inputs are kept in the page address after `#c=`. Browsers never send that
+part to a server, so a reload keeps your work, and "Copy a link to this
+calculation" gives a link that reopens the same formula and readings, for a
+bookmark or a lab partner. The address also lands in your browser history like
+any other page.
+
 ## Tests
 
 ```bash
