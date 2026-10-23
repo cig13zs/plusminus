@@ -165,10 +165,25 @@
     return Math.abs(Number(spec.reading) || 0) * pct / 100 + counts * res;
   }
 
+  /* A calibration certificate states its own coverage factor: k = 2 is common,
+     but 2.03, 2.52 or 3 all appear. Anything that is not a positive number gives
+     NaN, so a typo shows up as a missing value instead of a silent zero. */
+  function coverageFactor(k) {
+    var n = Number(k);
+    return n > 0 && isFinite(n) ? n : NaN;
+  }
+
   function fromSpec(spec) {
     var a = specHalfWidth(spec);
     var shape = spec.shape || 'rectangular';
-    return { halfWidth: a, shape: shape, u: a / DIVISOR[shape], dof: Infinity };
+    var divisor = shape === 'expanded' ? coverageFactor(spec.k) : DIVISOR[shape];
+    return { halfWidth: a, shape: shape, divisor: divisor, u: a / divisor, dof: Infinity };
+  }
+
+  // An expanded uncertainty U quoted with coverage factor k: u = U / k.
+  function fromExpanded(U, k) {
+    var divisor = coverageFactor(k);
+    return { U: Math.abs(Number(U) || 0), k: divisor, u: Math.abs(Number(U) || 0) / divisor, dof: Infinity };
   }
 
   /* This model treats display quantization error as rectangular over ±step/2,
@@ -438,6 +453,8 @@
     sensitivity: sensitivity,
     specHalfWidth: specHalfWidth,
     fromSpec: fromSpec,
+    fromExpanded: fromExpanded,
+    coverageFactor: coverageFactor,
     fromResolution: fromResolution,
     fromRepeats: fromRepeats,
     tFactor: tFactor,
