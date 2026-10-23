@@ -151,6 +151,42 @@ app.byId.copyBudget.fire('click');
 assert.ok(/\| Quantity \|/.test(app.copied()) && /u_c = /.test(app.copied()),
   'budget markdown output');
 
+// A certificate with its own coverage factor: V's spec becomes expanded with k = 2.52.
+function find(n, id) {
+  if (n.id === id) return n;
+  for (const c of n.children) { const hit = find(c, id); if (hit) return hit; }
+  return null;
+}
+const shapeSel = find(app.byId.quantities, 'q0-shape');
+assert.ok(shapeSel, 'the spec row has a "what that spec is" choice');
+shapeSel.value = 'expanded';
+shapeSel.fire('change');
+const kBox = find(app.byId.quantities, 'q0-k');
+assert.ok(kBox, 'choosing expanded shows a k box');
+assert.strictEqual(kBox.value, '2', 'k starts at 2');
+kBox.value = '2.52';
+kBox.fire('input');
+assert.ok(/after dividing by k = 2\.52\./.test(app.byId.quantities.text), 'the row explains the k it used');
+// u_V = 0.0107143, u_I = 0.0046188: u_c = sqrt(0.0214286^2 + 0.0923760^2) = 0.0948289, U = 0.18586
+assert.strictEqual(app.byId.answer.textContent, 'R = 10.00 ± 0.19 Ω', 'k = 2.52 result: ' + app.byId.answer.textContent);
+kBox.value = '0';
+kBox.fire('input');
+assert.ok(/k has to be a positive number/.test(app.byId.quantities.text), 'k = 0 is flagged on the row');
+assert.ok(app.byId.result.classList.contains('bad'), 'and the result does not pretend');
+
+// A ± typed in directly can be an expanded uncertainty too: I = 0.500, U = 0.010 at k = 2 -> u = 0.005.
+const modeSel = find(app.byId.quantities, 'q1-mode');
+modeSel.value = 'plusminus';
+modeSel.fire('change');
+const pmBox = find(app.byId.quantities, 'q1-pm');
+pmBox.value = '0.010';
+pmBox.fire('input');
+assert.ok(/taken as a standard uncertainty/.test(app.byId.quantities.text), 'plain ± is standard by default');
+const kindSel = find(app.byId.quantities, 'q1-pmkind');
+kindSel.value = 'expanded';
+kindSel.fire('change');
+assert.ok(/U = 0\.01 at k = 2, so u = U\/k = 0\.005\./.test(app.byId.quantities.text), 'expanded ± is divided by k');
+
 // Without core.js the page has to say so instead of throwing on every keystroke.
 const orphan = run(script, '/* core.js missing */');
 assert.ok(/did not load/.test(orphan.byId.answer.textContent),
