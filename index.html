@@ -184,8 +184,10 @@
   specification; it is not itself a standard deviation. When only the bounds are known and a rectangular
   distribution is appropriate, the standard uncertainty is 0.027 / √3 = 0.0156 V. This tool applies the
   selected distribution and shows the conversion in the budget.</p>
-  <p class="muted">If a calibration certificate explicitly reports expanded uncertainty with
-  <code>k = 2</code>, select that option. Other coverage factors are not currently supported.</p>
+  <p class="muted">If a calibration certificate reports an expanded uncertainty, pick "expanded,
+  from a certificate" and type the coverage factor it states. That is usually <code>k = 2</code>, but
+  certificates also print values such as 2.03 or 2.52 when the degrees of freedom are low. The same
+  choice exists for a ± you type in directly.</p>
 </section>
 
 <section>
@@ -365,26 +367,24 @@
       f.appendChild(field('+ counts', cnt, id + '-cnt'));
       f.appendChild(field('one count is worth', res, id + '-res'));
 
-      var shape = document.createElement('select');
-      [['rectangular', 'a limit from the manual (÷√3)'],
-       ['normal95', 'expanded, k = 2, from a certificate (÷2)'],
-       ['standard', 'already a standard uncertainty (÷1)']].forEach(function (o) {
-        var n = document.createElement('option');
-        n.value = o[0];
-        n.textContent = o[1];
-        shape.appendChild(n);
-      });
-      shape.value = s.shape || 'rectangular';
-      shape.addEventListener('change', function () { s.shape = shape.value; recompute(); });
+      // normal95 is the old name for an expanded uncertainty with k = 2.
+      if (s.shape === 'normal95') { s.shape = 'expanded'; s.k = '2'; }
+      var shape = choice([['rectangular', 'a limit from the manual (÷√3)'],
+        ['expanded', 'expanded, from a certificate (÷k)'],
+        ['standard', 'already a standard uncertainty (÷1)']], s.shape || 'rectangular', function (v) { s.shape = v; render(); });
       var wide = el('div', 'qmode wide');
       wide.appendChild(field('What that spec is', shape, id + '-shape'));
+      if (s.shape === 'expanded') wide.appendChild(kField(s, id));
       f.parentNode.insertBefore(wide, row.note);
       row.extra = wide;
 
     } else if (s.mode === 'plusminus') {
       var pm = input(s.pm, '0.05', function (v) { s.pm = v; });
-      f.className = 'qmode wide';
+      var kind = choice([['standard', 'a standard uncertainty (÷1)'],
+        ['expanded', 'expanded, from a certificate (÷k)']], s.pmKind || 'standard', function (v) { s.pmKind = v; render(); });
       f.appendChild(field('± (same unit as the reading)', pm, id + '-pm'));
+      f.appendChild(field('What that ± is', kind, id + '-pmkind'));
+      if (s.pmKind === 'expanded') f.appendChild(kField(s, id));
 
     } else if (s.mode === 'repeats') {
       var reps = input(s.reps, '10.1, 10.3, 10.2, 10.0, 10.4', function (v) { s.reps = v; });
@@ -396,6 +396,25 @@
       f.className = 'qmode wide';
       f.appendChild(field('Smallest step the display shows', step, id + '-step'));
     }
+  }
+
+  function choice(options, value, onChange) {
+    var sel = document.createElement('select');
+    options.forEach(function (o) {
+      var n = document.createElement('option');
+      n.value = o[0];
+      n.textContent = o[1];
+      sel.appendChild(n);
+    });
+    sel.value = value;
+    sel.addEventListener('change', function () { onChange(sel.value); });
+    return sel;
+  }
+
+  // The coverage factor printed on the certificate, next to the expanded uncertainty.
+  function kField(s, id) {
+    if (s.k === undefined) s.k = '2';
+    return field('k from the certificate', input(s.k, '2', function (v) { s.k = v; }), id + '-k');
   }
 
   function numbersIn(text) {
@@ -415,12 +434,17 @@
     if (s.mode === 'spec') {
       var spec = P.fromSpec({
         reading: value, percent: Number(s.pct), counts: Number(s.counts),
-        resolution: Number(s.res), shape: s.shape || 'rectangular'
+        resolution: Number(s.res), shape: s.shape || 'rectangular', k: s.k
       });
       out.u = spec.u;
       note = '± ' + fmt(spec.halfWidth) + ' from the spec, so u = ' + fmt(spec.u) +
         (spec.shape === 'rectangular' ? ' after dividing by √3.' :
-         spec.shape === 'normal95' ? ' after dividing by 2.' : '.');
+         spec.shape === 'normal95' ? ' after dividing by 2.' :
+         spec.shape === 'expanded' ? ' after dividing by k = ' + fmt(spec.divisor) + '.' : '.');
+    } else if (s.mode === 'plusminus' && s.pmKind === 'expanded') {
+      var ex = P.fromExpanded(s.pm, s.k);
+      out.u = ex.u;
+      note = 'U = ' + fmt(ex.U) + ' at k = ' + fmt(ex.k) + ', so u = U/k = ' + fmt(ex.u) + '.';
     } else if (s.mode === 'plusminus') {
       out.u = Math.abs(Number(s.pm)) || 0;
       note = 'u = ' + fmt(out.u) + ', taken as a standard uncertainty.';
@@ -444,6 +468,11 @@
       note = 'Half a step is ' + fmt(r.halfWidth) + ', so u = ' + fmt(r.u) + ' after dividing by √3.';
     }
 
+    if (!isFinite(out.u)) {
+      // a bad k would otherwise drop out as a zero uncertainty, which looks like a result
+      note = 'k has to be a positive number, such as 2.';
+      out.value = NaN;
+    }
     row.note.textContent = note;
     row.node.classList.toggle('dead', !name || !isFinite(out.value));
     return out;

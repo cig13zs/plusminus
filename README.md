@@ -47,8 +47,11 @@ are known and a rectangular distribution is appropriate, this tool uses
 `u = a / √3`. Treating the bound `a` as a standard uncertainty instead makes
 that component √3 times larger.
 
-If a calibration certificate explicitly reports expanded uncertainty with
-`k = 2`, select that option. Other coverage factors are not currently supported.
+If a calibration certificate reports an expanded uncertainty, choose
+"expanded, from a certificate" and type the coverage factor it states, so
+`u = U / k`. That works for an instrument spec and for a ± you already know.
+`k = 2` is the usual value; certificates with few degrees of freedom print
+others, such as 2.03 or 2.52.
 
 ## Formulas
 

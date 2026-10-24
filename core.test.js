@@ -52,6 +52,18 @@ near(spec.halfWidth / spec.u, 1.7320508, 1e-6, 'sqrt(3)');
 const asNormal = P.fromSpec({ reading: 5.0, percent: 0.5, counts: 2, resolution: 0.001, shape: 'normal95' });
 near(asNormal.u, 0.0135, 1e-9, 'k=2 certificate divisor');
 
+// a certificate with its own coverage factor
+const k2 = P.fromSpec({ reading: 5.0, percent: 0.5, counts: 2, resolution: 0.001, shape: 'expanded', k: 2 });
+near(k2.u, asNormal.u, 1e-12, 'expanded with k = 2 matches the k = 2 shape');
+near(P.fromSpec({ reading: 5.0, percent: 0.5, counts: 2, resolution: 0.001, shape: 'expanded', k: '2.52' }).u,
+  0.027 / 2.52, 1e-12, 'k = 2.52 from a certificate');
+assert.ok(isNaN(P.fromSpec({ reading: 5, percent: 0.5, shape: 'expanded', k: 0 }).u), 'k = 0 is refused');
+assert.ok(isNaN(P.fromSpec({ reading: 5, percent: 0.5, shape: 'expanded', k: 'two' }).u), 'k has to be a number');
+const cert = P.fromExpanded(0.12, 2);
+near(cert.u, 0.06, 1e-12, 'U = 0.12 at k = 2 is u = 0.06');
+near(P.fromExpanded(-0.3, 3).u, 0.1, 1e-12, 'sign of U does not matter');
+assert.ok(isNaN(P.fromExpanded(0.1, -1).u), 'negative k is refused');
+
 // resolution alone: a 0.01 V display step means ±0.005 rectangular
 const res = P.fromResolution(0.01);
 near(res.halfWidth, 0.005, 1e-12, 'half a step');
