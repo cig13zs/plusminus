@@ -72,9 +72,9 @@ function node(tag) {
 
 const IDS = ['sym', 'formula', 'unit', 'quantities', 'add', 'onesig', 'result',
              'answer', 'facts', 'budgetWrap', 'budget', 'copyText', 'copyLatex',
-             'copyBudget', 'copied', 'fhelp'];
+             'copyBudget', 'copyLink', 'copied', 'fhelp'];
 
-function run(source, core) {
+function run(source, core, extra) {
   const byId = {};
   IDS.forEach((id) => { byId[id] = node('div'); byId[id].id = id; });
   byId.sym.value = 'R';
@@ -93,6 +93,7 @@ function run(source, core) {
     setTimeout: () => 0,
     console,
   };
+  Object.assign(sandbox, extra || {});
   sandbox.globalThis = sandbox;
   sandbox.window = sandbox;
   vm.createContext(sandbox);
@@ -186,6 +187,40 @@ const kindSel = find(app.byId.quantities, 'q1-pmkind');
 kindSel.value = 'expanded';
 kindSel.fire('change');
 assert.ok(/U = 0\.01 at k = 2, so u = U\/k = 0\.005\./.test(app.byId.quantities.text), 'expanded ± is divided by k');
+
+// The form survives a reload and travels as a link, through the part after #.
+const pageUrl = 'https://example.test/plusminus/';
+let replaced = null;
+const linked = run(script, core, {
+  location: { hash: '', href: pageUrl },
+  history: { replaceState: (_s, _t, url) => { replaced = url; } },
+});
+assert.ok(/^#c=/.test(replaced), 'the address is kept up to date: ' + replaced);
+linked.byId.formula.value = 'V*I';
+linked.byId.formula.fire('input');
+linked.byId.sym.value = 'P';
+linked.byId.sym.fire('input');
+linked.byId.unit.value = 'W';
+linked.byId.unit.fire('input');
+const wanted = linked.byId.answer.textContent;
+linked.byId.copyLink.fire('click');
+const link = linked.copied();
+assert.ok(link.startsWith(pageUrl + '#c='), 'copied link: ' + link);
+assert.strictEqual(link.slice(pageUrl.length), replaced, 'the copied link and the address agree');
+
+const reopened = run(script, core, { location: { hash: link.slice(pageUrl.length), href: link } });
+assert.strictEqual(reopened.byId.answer.textContent, wanted, 'a link reopens the same answer');
+assert.strictEqual(reopened.byId.formula.value, 'V*I');
+assert.strictEqual(reopened.byId.quantities.children.length, 2);
+
+for (const junk of ['#c=%7Bnot json', '#c=' + encodeURIComponent('{"q":"x"}'), '#something-else']) {
+  const fallback = run(script, core, { location: { hash: junk, href: pageUrl + junk } });
+  assert.strictEqual(fallback.byId.answer.textContent, 'R = 10.00 ± 0.19 Ω', 'a broken link falls back to the example: ' + junk);
+}
+const hostile = '#c=' + encodeURIComponent(JSON.stringify({ sym: 'R', formula: 'V/I', unit: 'Ω',
+  q: [{ sym: 'V', value: '5', mode: 'evil', pct: 0.5, onclick: 'x' }, { sym: 'I', value: '0.5', mode: 'plusminus', pm: '0.01' }] }));
+const cleaned = run(script, core, { location: { hash: hostile, href: pageUrl + hostile } });
+assert.ok(/^R = /.test(cleaned.byId.answer.textContent), 'unknown modes and non-string values are dropped, not trusted');
 
 // Without core.js the page has to say so instead of throwing on every keystroke.
 const orphan = run(script, '/* core.js missing */');
